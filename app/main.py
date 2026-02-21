@@ -1,30 +1,40 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+import logging
 import joblib
-import os
-import numpy as np
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+from prometheus_fastapi_instrumentator import Instrumentator
+
+# Logging setup
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Model Serving Platform")
 
-MODEL_PATH = "model.pkl"
+# Load trained model
+model = joblib.load("model.pkl")
 
-# Load model
-if os.path.exists(MODEL_PATH):
-    model = joblib.load(MODEL_PATH)
-else:
-    model = None
-
+# Request schema
 class PredictionRequest(BaseModel):
     features: list[float]
 
+# Logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"Incoming request: {request.method} {request.url}")
+    response = await call_next(request)
+    logger.info(f"Response status: {response.status_code}")
+    return response
+
+# Health endpoint
 @app.get("/health")
 def health():
     return {"status": "healthy"}
 
+# Prediction endpoint
 @app.post("/predict")
 def predict(request: PredictionRequest):
-    if not model:
-        return {"error": "Model not loaded"}
-    features = np.array(request.features).reshape(1, -1)
-    prediction = model.predict(features)
+    prediction = model.predict([request.features])
     return {"prediction": prediction.tolist()}
+
+# Expose Prometheus metrics
+Instrumentator().instrument(app).expose(app)
