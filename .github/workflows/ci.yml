@@ -1,0 +1,41 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        cd app
+        pip install -r requirements.txt
+
+    - name: Validate FastAPI app imports
+      run: |
+        cd app
+        python -c "import main"
+
+    - name: Build Docker image
+      run: |
+        docker build -t ai-model-serving -f docker/Dockerfile .
+
+    - name: Run Trivy security scan
+      uses: aquasecurity/trivy-action@0.20.0
+      with:
+        image-ref: 'ai-model-serving'
+        format: 'table'
+        exit-code: '0'
